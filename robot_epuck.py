@@ -32,6 +32,7 @@ class Robot:
         self.sensor_ch, self.robot_number = extract_name(self.sensor_name)
         self.num_sensors = int(8)  # Numbers of sensor attached to robot
         self.sensor_handles = np.array([], dtype='i')  #  Handles of Sensors
+        self.sensors_detecting = np.ones(self.num_sensors, dtype = 'i') * -1 # Presence of robot, obstacle and no presence
         self.detectionStates = [False] * self.num_sensors  # States of Sensors detecting or not
         self.sensors_position = np.zeros([self.num_sensors, 3])  # Position of Sensors w.r.t robot frame of reference
         self.sensor_values = np.array([0.000] * self.num_sensors)  # Sensors values Modified
@@ -94,18 +95,21 @@ class Robot:
         self.det_obj = list()
         for s in range(1, self.num_sensors + 1):
             self.errorCode, detectionState, detectedPoint, detectedObjectHandle, detectedSurfaceNormalVector = vrep.simxReadProximitySensor(
-                self.clientID, self.sensor_handles[s - 1], vrep.simx_opmode_oneshot_wait)  # Measure distance using Ultrasonic Sensor
+                self.clientID, self.sensor_handles[s - 1], vrep.simx_opmode_streaming + 4000)  # Measure distance using Ultrasonic Sensor
             self.detectionStates[s - 1] = detectionState  # Sensor state detecting or not
             #print('detectedObjectHandle', detectedObjectHandle)
             if not detectionState:  # To overcome out of bound distance problem
                 detectedPoint = [0.0] * 3
                 self.det_obj_handles[s - 1] = 0.0
+                self.sensors_detecting[s-1] = -1
             else:  # when point is connected either it is robot aur object
                 self.det_obj_handles[s - 1] = detectedObjectHandle
                 if detectedObjectHandle in self.static_object_handles:  # when robot sensor detect an object
                     self.det_obj.append(detectedObjectHandle)
+                    self.sensors_detecting[s - 1] = 0
                 else:  # # when robot sensor detect a robot
                     self.det_rob.append(detectedObjectHandle)
+                    self.sensors_detecting[s - 1] = 1
             dist = np.linalg.norm(detectedPoint)  # Calculation of distance
             self.sensor_raw_values[s - 1] = dist
         #self.sensor_values = np.round(self.sensor_values, 2)

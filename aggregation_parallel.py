@@ -8,6 +8,10 @@ import psutil
 import datetime
 import random
 
+#------------------------------9-6-2021-----------------#
+
+#Parallel execution of aggregation with out object avoidance but not working fine
+
 
 
 vrep.simxFinish(-1)  # just in case, close all opened connections

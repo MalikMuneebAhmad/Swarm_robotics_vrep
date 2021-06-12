@@ -79,4 +79,3 @@ while t < 60:
 cluster(robots_position, robots_det_rob)
 vrep.simxStopSimulation(ID, vrep.simx_opmode_blocking)
 print('System CPU load is {} %'.format(psutil.cpu_percent(interval=0.5)))
-

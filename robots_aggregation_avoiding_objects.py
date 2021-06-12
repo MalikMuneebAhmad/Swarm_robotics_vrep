@@ -49,6 +49,7 @@ vrep.simxStartSimulation(clientID, vrep.simx_opmode_blocking)
 loop_start_time = time.time()
 while current_time - loop_start_time < 200:
     rob = list(range(num_robots))
+    ex2 = time.time()
     for i in range(num_robots):
         sensor_raw1, det_state1 = robots[i].ultrasonic_values()
         # print('Detection------States1', det_state1)
@@ -56,6 +57,8 @@ while current_time - loop_start_time < 200:
         theta1 = robots[i].object_avoidance(0.2)
         robots[i].chemotaxis_gradient()
         v_l[i], v_r[i], rot_t[i] = robots[i].change_direction()
+    ex1 = time.time()
+    print('Calculation time is', (ex2-ex1))
     for j in range(num_robots):
         robots[j].movement(v_l[j], v_r[j])
         robots[j].update_position()
