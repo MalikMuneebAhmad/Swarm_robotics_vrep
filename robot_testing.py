@@ -16,7 +16,14 @@ else:
     print('Connection not successful')
     sys.exit('Could not connect')
 
-num_robots = 1
+num_robots = 2
 robots = [Robot(clientID, 'ePuck#' + str(num), 'ePuck_proxSensor#' + str(num)) for num in range(num_robots)]
-
-robots[0].movement(2,2)
+current_time = time.time()
+vrep.simxStartSimulation(clientID, vrep.simx_opmode_blocking)
+loop_start_time = time.time()
+while current_time - loop_start_time < 20:
+    for i in range(num_robots):
+        robots[i].wait(0.0)
+        sensor_raw1, det_state1 = robots[i].ultrasonic_values()
+        print('Robot {} Sensor raw values {}'.format(i, robots[i].sensor_raw_values))
+        print('Robot {} Sensor Detection state {}'.format(i, robots[i].detectionStates))

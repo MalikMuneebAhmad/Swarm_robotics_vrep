@@ -95,7 +95,7 @@ class Robot:
         self.det_obj = list()
         for s in range(1, self.num_sensors + 1):
             self.errorCode, detectionState, detectedPoint, detectedObjectHandle, detectedSurfaceNormalVector = vrep.simxReadProximitySensor(
-                self.clientID, self.sensor_handles[s - 1], vrep.simx_opmode_streaming + 4000)  # Measure distance using Ultrasonic Sensor
+                self.clientID, self.sensor_handles[s - 1], vrep.simx_opmode_streaming + 000)  # Measure distance using Ultrasonic Sensor
             self.detectionStates[s - 1] = detectionState  # Sensor state detecting or not
             #print('detectedObjectHandle', detectedObjectHandle)
             if not detectionState:  # To overcome out of bound distance problem
@@ -120,7 +120,7 @@ class Robot:
     def sensor_chemo(self, mindist, maxdist):  # Minimum and maximum distances b/w Robots
         self.sensor_values = np.array([0.000] * self.num_sensors) # and Objects
         for i in range(self.num_sensors):
-            if mindist > self.sensor_raw_values[i] > 0.0001:
+            if mindist > self.sensor_raw_values[i] > 0.04:
                 #print('Distace', dist)
                 self.sensor_values[i] = self.sensor_raw_values[i] - mindist
                 self.sensor_avoid[i] = self.sensor_raw_values[i] - mindist
@@ -208,15 +208,19 @@ class Robot:
             #print('Robot will rotate with time {} and velocities {} and {}'.format(rot_time, v_r, v_l))
         else:  # For straight movement or reverse movement along current axis
             if self.currrent_gradient > 0.0:  # Move straight
-                v_l = 1.50
-                v_r = 1.50
+                v_l = self.currrent_gradient * 30
+                v_r = self.currrent_gradient * 30
                 rot_time = 1
                 #print('Robot will move straight with time {} and velocities {} and {}'.format(rot_time, v_r, v_l))
             elif self.currrent_gradient < 0.0:  # Move backword
-                v_l = -1.50
-                v_r = -1.50
+                v_l = self.currrent_gradient * 30
+                v_r = self.currrent_gradient * 30
                 rot_time = 1
                 #print('Robot will move backword with time {} and velocities {} and {}'.format(rot_time, v_r, v_l))
+            elif self.currrent_gradient == 0.0 and self.det_rob:# not all(v == False for v in self.det_rob):  # Move backword
+                v_l = self.currrent_gradient * 30
+                v_r = self.currrent_gradient * 30
+                rot_time = 1
             else: # self.r_rot:  #  Move Randomly straight
                 v_l = 2.5
                 v_r = 2.5

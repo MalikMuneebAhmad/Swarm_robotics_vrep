@@ -18,7 +18,7 @@ class Modc:
 
     def no_neigh_rob(self, target_no_robots, diffusion_rate):  # An external danger # Decided diffusion rate is 0.025
         no_nei_rob = (self.detection_obj == 1).sum()  # Count number of robots connected with robot
-        if target_no_robots == 4:  # Diffuse danger when current no robots == target no of robots
+        if target_no_robots == 2:  # Diffuse danger when current no robots == target no of robots
             self.danger_nr = (1 - diffusion_rate) * self.danger_nr
         else:
             self.danger_nr = self.danger_nr + (target_no_robots - no_nei_rob) * (diffusion_rate)

@@ -1,13 +1,16 @@
 import sim as vrep  # V-rep library
 import sys
 import time  # used to keep track of time
+import psutil
+from regulation_mechanism import Modc
+from robot_epuck import Robot
 import numpy as np  # array library
 import math
-import psutil
-from robot_epuck import Robot
 
 
 # ----------------My Functions----------------#
+
+
 
 def cluster(robots_pos, robots_det_rob):  # Calculate position and detected robot of a robot
     robots_detrob_dic = dict()
@@ -50,6 +53,7 @@ loop_start_time = time.time()
 while current_time - loop_start_time < 200:
     rob = list(range(num_robots))
     ex2 = time.time()
+    Modc.no_neigh_rob(2, 0.25)
     for i in range(num_robots):
         sensor_raw1, det_state1 = robots[i].ultrasonic_values()
         # print('Detection------States1', det_state1)
