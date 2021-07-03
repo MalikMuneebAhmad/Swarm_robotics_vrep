@@ -20,6 +20,16 @@ class Modc:
         danger_status = Modc.value_dc(self.danger_nr)
         return danger_status
 
+    def pamp_vision(self, signal_value, limit):
+        if signal_value >= limit:
+            self.pamp_value = 0.1
+        else:
+            self.pamp_value = 0.0
+            pass
+
+    def commulative_danger_signal(self, wd, wp):
+        pass
+
     # Base on danger theory immune cell must respond to harmful signal not necessarily to foreign bodies
     # Both safe and internal danger signal will be generated from it.
 
