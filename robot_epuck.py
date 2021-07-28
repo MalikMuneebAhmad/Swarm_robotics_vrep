@@ -6,13 +6,7 @@ import math
 import random
 import datetime
 import psutil
-
-
-def angles_calcu(sensor_x, sensor_y, robot_x, robot_y):  # function for calculating gradient or angles
-    grad_x = (sensor_x - robot_x)
-    grad_y = (sensor_y - robot_y)
-    angles = np.arctan2(grad_y, grad_x)
-    return angles
+from utlis import *
 
 
 def extract_name(sensor_name):
@@ -33,7 +27,8 @@ class Robot:
         self.sensor_ch, self.robot_number = extract_name(self.sensor_name)
         self.num_sensors = int(8)  # Numbers of sensor attached to robot
         self.sensor_handles = np.array([], dtype='i')  # Handles of Sensors
-        self.Vision_sensor = int()
+        self.Vision_sensor_handles = np.array([], dtype='i')  # Handles of Sensors
+        self.vision_sensor_values = np.zeros([self.num_sensors])
         self.front_Vision_sensor = int()
         self.sensors_detecting = np.ones(self.num_sensors,
                                          dtype='i') * -1  # Presence of robot, obstacle and no presence
@@ -50,7 +45,7 @@ class Robot:
         self.det_rob = list()  # Handles of robots detected by a robot
         self.det_obj = list()  # Handles of objects detected by a robot
         self.obj_avoid = False  # Condition to Regulate Object Avoidance
-        ob_num = ['0', '1', '2', '3', '4', '5', '6', '7']  # name of objects
+        ob_num = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']  # name of objects
         for i in ob_num:  # Loop to acquire Handles of all objects
             errorCode, object_handle = vrep.simxGetObjectHandle(clientID, 'Cuboid' + i, vrep.simx_opmode_blocking)
             self.static_object_handles.append(object_handle)
@@ -72,11 +67,9 @@ class Robot:
                                                                           vrep.simx_opmode_streaming)
         # Get robot position
         self.returnCode, self.robot_position = vrep.simxGetObjectPosition(clientID, self.robot_handle, -1,
-                                                                          vrep.simx_opmode_oneshot_wait)
-        errorCode, self.Vision_sensor = vrep.simxGetObjectHandle(clientID, 'Vision_sensor0' + self.robot_number,
-                                                            vrep.simx_opmode_blocking)  # Retrieving Sensor handles
-        errorCode, self.front_Vision_sensor = vrep.simxGetObjectHandle(clientID, 'Vision_sensor1' + self.robot_number,
-                                                                 vrep.simx_opmode_blocking)  # Retrieving Sensor handles
+                                                                          vrep.simx_opmode_buffer)
+        errorCode, self.front_Vision_sensor = vrep.simxGetObjectHandle(clientID, 'Vision_sensor0' + self.robot_number,
+                                                            vrep.simx_opmode_blocking)  # Retr ieving Sensor handles
 
         for x in range(1, self.num_sensors + 1):  # Sensor Handles Access
             # print(self.sensor_ch + str(x) + self.robot_number)
@@ -85,17 +78,23 @@ class Robot:
                                                                      vrep.simx_opmode_oneshot_wait)  # Retrieving Sensor handles
             self.sensor_handles = np.append(self.sensor_handles, sensor_handle)
             self.errorCode, detectionState, detectedPoint, detectedObjectHandle, detectedSurfaceNormalVector = vrep.simxReadProximitySensor(
-                self.clientID, sensor_handle, vrep.simx_opmode_streaming)  # First call for Read ultrasonic Sensor
+                self.clientID, sensor_handle, vrep.simx_opmode_oneshot_wait)  # First call for Read ultrasonic Sensor
 
             self.returnCode, sensor_position = vrep.simxGetObjectPosition(clientID, self.sensor_handles[x - 1],
-                                                                          vrep.sim_handle_parent,
-                                                                          vrep.simx_opmode_oneshot_wait)  # Retrieving Sensor position w.r.t Robot
+                                                                          -1, vrep.simx_opmode_streaming)  # Retrieving Sensor position w.r.t Robot
             self.sensors_position[x - 1] = sensor_position
-        # print('sensors_position', self.sensors_position)
-        # self.sensor_angles = angles_calcu(self.sensors_position[:, 1], self.sensors_position[:, 0], 0.0, 0.0)
-        self.sensor_angles = np.array([90, 45, 0, -45, -90, -135, 180, 135]) * (
-                math.pi / 180)  # Angles of Sensors w.r.t direction axis
+        #---------------------Vision Sensor------------#
+        for v in range(1, self.num_sensors + 1):  # Sensor Handles Access
+            print('Vision_sensor' + str(v) + self.robot_number)
+            self.errorCode, vision_sensor_handle = vrep.simxGetObjectHandle(clientID, 'Vision_sensor' + str(v) + self.robot_number,
+                                                                     vrep.simx_opmode_blocking)  # Retrieving Sensor handles
+            self.Vision_sensor_handles = np.append(self.Vision_sensor_handles, vision_sensor_handle)
+            #print('self.Vision_sensor_handles', self.Vision_sensor_handles)
+        self.sensor_angles = np.array([-90, -45, 0, 45, 90, 135, 180, -135]) * (
+                math.pi / 180)  # Angles of values of sensors
         # print('sensor_angles', self.sensor_angles)
+        #self.sensor_angles = np.array([-88.80256321, -50.3427192, -1.24791524, 45.4932798,
+               #95.0678522, 133.79454788, 178.85683315, -133.50366118]) * (math.pi / 180)
         self.errorCode, self.left_motor_handle = vrep.simxGetObjectHandle(clientID,
                                                                           'ePuck_leftJoint' + self.robot_number,
                                                                           vrep.simx_opmode_oneshot_wait)
@@ -103,8 +102,6 @@ class Robot:
         self.errorCode, self.right_motor_handle = vrep.simxGetObjectHandle(clientID,
                                                                            'ePuck_rightJoint' + self.robot_number,
                                                                            vrep.simx_opmode_oneshot_wait)
-        self.returnCode, self.detectionState, auxPackets = vrep.simxReadVisionSensor(self.clientID, self.Vision_sensor,
-                                                                           vrep.simx_opmode_streaming)
 
     def ultrasonic_values(self):  # Calculate distances for ultrasonic Sensors
         self.det_rob = list()
@@ -119,7 +116,7 @@ class Robot:
                 detectedPoint = [0.0] * 3
                 self.det_obj_handles[s - 1] = 0
                 self.sensors_detecting[s - 1] = -1
-            else:  # when point is connected either it is robot aur object
+            else:  # when point is connected either it is a robot or an object
                 self.det_obj_handles[s - 1] = detectedObjectHandle
                 if detectedObjectHandle in self.static_object_handles:  # when robot sensor detect an object
                     self.det_obj.append(detectedObjectHandle)
@@ -132,11 +129,12 @@ class Robot:
         # self.sensor_values = np.round(self.sensor_values, 2)
         self.sensor_raw_values = np.round(self.sensor_raw_values, 2)
         # print('sensor raw values', self.sensor_raw_values)
+        self.no_nei = len(self.det_rob)
         return self.sensor_raw_values, self.detectionStates
 
     def vision_sensor(self):
-        returnCode, detectidonState, auxPackets = vrep.simxReadVisionSensor(self.clientID, self.Vision_sensor,
-                                                                           vrep.simx_opmode_streaming)
+        returnCode, detectidonState, auxPackets = vrep.simxReadVisionSensor(self.clientID, self.Vision_sensor_handles[2],
+                                                                           vrep.simx_opmode_streaming + 000)
         #print('auxPackets', auxPackets)
         if auxPackets == []:
             auxPackets = [[0.75] * 15]
@@ -158,6 +156,18 @@ class Robot:
                                                                       #vrep.simx_opmode_streaming + 5)
         # ir_sensor_value = 0 if image == [0] else 1
         return ir_sensor_value
+
+    def read_vision_sensor(self):
+        for s in range(1, self.num_sensors + 1):
+            self.returnCode, detectidonState, auxPackets = vrep.simxReadVisionSensor(self.clientID, self.Vision_sensor_handles[s-1],
+                                                                                vrep.simx_opmode_streaming)
+            #print('vision_snsor return code', self.returnCode)
+            #print('detectidonState', detectidonState)
+            #print('auxPackets', auxPackets)
+            auxPackets = [[1] * 15] if auxPackets == [] else auxPackets
+            self.vision_sensor_values[s-1] = auxPackets[0][1]
+        #print(' All Vision values', self.vision_sensor_values)
+        return self.vision_sensor_values
 
     def send_signal(self):
         self.returnCode = vrep.simxSetIntegerSignal(self.clientID, 'Presence', self.ir_sensor_value, vrep.simx_opmode_oneshot)
@@ -181,18 +191,17 @@ class Robot:
         # print('Sensor values', self.sensor_values)
         return self.sensor_values
 
-    def sensor_avoidance_values(self, mlimt_dist):  # Minimum and maximum distances b/w Robots
+    def sensor_avoidance_values(self, mlimt_dist, sensor_range):  # Minimum and maximum distances b/w Robots
         self.sensor_avoid = np.array([0.0] * self.num_sensors)  # and Objects
-        sensor_range = 0.3
         for i in range(self.num_sensors):
             if mlimt_dist > self.sensor_raw_values[i] > 0.02:
                 self.sensor_avoid[i] = self.sensor_raw_values[i] - mlimt_dist
             elif self.sensor_raw_values[i] > mlimt_dist:
                 self.sensor_avoid[i] = self.sensor_raw_values[i] - sensor_range
             elif self.sensor_raw_values[i]:
-                self.sensor_avoid[i] = 0.3
-        # print('Sensor values', self.sensor_values)
-        return self.sensor_values
+                self.sensor_avoid[i] = 0.0
+        # print('Sensor avoid values', self.sensor_avoid)
+        return self.sensor_avoid
 
     def object_avoidance(self, avoidable_obj, front_maxdist):  # Avoid the object in front of robot
         theta = 0.0
@@ -204,16 +213,66 @@ class Robot:
             2] > 0.01):  # or (front_maxdist >= self.sensor_raw_values[6] > 0.01)):
             self.obj_avoid = True
             print('Object avoidance behavior is active')
+            #print(' Sensor values in ob_AAVOI', self.sensor_avoid)
             fx = self.sensor_avoid * np.cos(self.sensor_angles)
             fy = self.sensor_avoid * np.sin(self.sensor_angles)
+            #print('fx = ', fx)
+            #print('fy = ', fy)
             fres_x = np.sum(fx)
             fres_y = np.sum(fy)
-            theta = max(math.pi / 4, math.atan2(fres_y, fres_x))
+            avoid_angle = - math.atan2(fres_y, fres_x)
+            if abs(avoid_angle) < math.pi/6:
+                theta = math.pi/4 if avoid_angle >= 0 else -math.pi/4
+            else:
+                theta = avoid_angle
+            #print('avoid_angle', avoid_angle)
         #elif self.det_obj != []:  # random straight movement after object avoidance
             #print('Required a random straight movement')
             #self.r_rot = not self.r_rot  # May be False
             #self.obj_avoid = True
         return theta
+
+    def vision_sensor_gradient(self, vision_sensor_values):
+        theta = 0.0
+        max_grad = 0.0
+        # P = [pE, pEN, pN, pNW, pW, pWS, pS, pSE]
+        if not self.obj_avoid:
+            gradx = vision_sensor_values[2] - vision_sensor_values[6]
+            grady = vision_sensor_values[0] - vision_sensor_values[4]
+            gradxy = vision_sensor_values[1] - vision_sensor_values[5]
+            gradyx = vision_sensor_values[7] - vision_sensor_values[3]
+            all_grad = np.array([gradx, grady, gradxy, gradyx])
+            max_grad = np.max(abs(all_grad))
+            if max_grad == 0.0:  # To overcome infinite array
+                all_grad = np.array([0.0] * 4)
+            else:  # maximum gradient is calculated
+                all_grad = all_grad / (max_grad * 8)
+            #print('vision sensor gradient', all_grad)
+            p_array = [Robot.p + all_grad[0], Robot.p + all_grad[2], Robot.p + all_grad[1], Robot.p + all_grad[3],
+                 Robot.p - all_grad[0], Robot.p - all_grad[2], Robot.p - all_grad[1],
+                 Robot.p - all_grad[3]]  # Change probability w.r.t Gradient
+            '''simulation = [random.randrange(8) * 1 for _ in range(16)]  # Randomly choose between 0-7 for 16 times
+            freq = [simulation.count(i) for i in range(8)]  # Count the occuring of each number(event)
+            directions = np.array([float(i * j) for i, j in zip(p_array, freq)])'''  # Possibility of each direction
+            suitable_theta = np.argmax(p_array)  # Select the maximum likelihood direction
+            theta = (self.thetas[suitable_theta] * math.pi / 180)
+        return max_grad, theta
+
+    def flock_com(self, target_value, target_theta, weight_forces, weight_target):  # Input is target point location (in terms of vector)
+        # self.sensors_detecting will be utuilized to remove effect of obstacles from sensor values
+        rob_effect = self.sensors_detecting[:5] * self.sensor_values[:5]
+        f_res_x, f_res_y = resultant_vector(rob_effect, self.sensor_angles[:5])
+        target_x, target_y = resultant_vector(target_value, target_theta)
+        self.no_nei = 1 if self.no_nei == 0 else self.no_nei
+        com_x = (weight_forces * f_res_x / self.no_nei) + (weight_target * target_x)
+        com_y = (weight_forces * f_res_y / self.no_nei) + (weight_target * target_y)
+        return com_x, com_y
+
+    def current_com(self, comp_x, comp_y, theta, pos):  # Convert previous COM into current frame of seference
+        pos_x, pos_y = resultant_vector(pos, theta)
+        compc_x = (comp_x - pos_x)  # Center of mass previous now in current ref frame
+        compc_y = (comp_y - pos_y)  # Center of mass previous now in current ref frame
+        return compc_x, compc_y
 
     def chemotaxis_gradient(self):
         all_grad = np.zeros([4])
@@ -245,16 +304,36 @@ class Robot:
                  Robot.p - all_grad[3]]  # Change probability w.r.t Gradient
             if max_grad != 0.0:  # Movement in the direction of maximum gradient
                 suitable_theta = np.argmax(P)  # without randomness
-                print('Robot will move Specifically at an angle of')
+                #print('Robot will move Specifically at an angle of')
             elif self.r_rot:  # For Random rotational movement of a single robot
                 simulation = [random.randrange(8) * 1 for _ in range(16)]  # Randomly choose between 0-7 for 16 times
                 freq = [simulation.count(i) for i in range(8)]  # Count the occuring of each number(event)
                 directions = np.array([float(i * j) for i, j in zip(P, freq)])  # Possibility of each direction
                 suitable_theta = np.argmax(directions)  # Select the maximum likelihood direction
                 self.r_rot = False  # To get random straight movement after random rotation
-                print('Robot will move randomly at an angle of')
+                #print('Robot will move randomly at an angle of')
             theta = (self.thetas[suitable_theta] * math.pi / 180)
         return theta
+
+    def displacement_robot(self, s): # give s in unit of meters
+        disp_time = 1.0
+        v = (s * 2.372) / (self.r * disp_time)
+        if v > self.vmax:
+            v = self.vmax
+            disp_time = (s * 2.372) / (self.r * self.vmax)
+        v_l = v
+        v_r = v
+        return v_l, v_r, disp_time
+
+    def rotation_robot(self, theta, reg_fac):
+        rot_time = random.uniform(1.0, 2.0)
+        v = abs(0.053 * theta) / (2 * rot_time * self.r) * reg_fac
+        if v > self.vmax:
+            v = self.vmax
+            rot_time = abs(0.053 * theta) / (2 * self.vmax * self.r) * reg_fac
+        v_r = -v if theta < 0 else v
+        v_l = -v_r
+        return v_l, v_r, rot_time
 
     def control_param(self, theta, r_fac):  # Convert theta to motor speed
         if theta != 0:  # For both Random and Specific Rotation
@@ -303,8 +382,16 @@ class Robot:
 
     def get_position(self):
         self.returnCode, self.robot_position = vrep.simxGetObjectPosition(self.clientID, self.robot_handle, -1,
-                                                                          vrep.simx_opmode_oneshot_wait)
-        return self.robot_position[0:2]
+                                                vrep.simx_opmode_streaming)  # robot pos w.r.t world frame of reference
+        self.returnCode, front_sensor_pos = vrep.simxGetObjectPosition(self.clientID, self.sensor_handles[2], -1,
+                                                vrep.simx_opmode_streaming)  # front sensor pos w.r.t world frame of reference
+        self.robot_position = np.array(self.robot_position)
+        front_sensor_pos = np.array(front_sensor_pos)
+        self.robot_position = np.ones(3) if np.all(self.robot_position == 0) else self.robot_position
+        front_sensor_pos = np.zeros(3) if np.all(front_sensor_pos == 0) else front_sensor_pos
+        disp, dir_rob_wax = angles_calcu(front_sensor_pos[0], front_sensor_pos[1], self.robot_position[0], self.robot_position[1])  # get pos of front sensor w.r.t world frame of ref
+
+        return self.robot_position[0:2], disp, dir_rob_wax
 
     def neighbor_check(self):
         nei_status = False
@@ -362,7 +449,7 @@ class Robot:
         return theta
 
 
-class Robot1:
+'''class Robot1:
     p = 1 / 8
 
     def __init__(self, clientID, robot_name, sensor_name):
@@ -423,9 +510,11 @@ class Robot1:
                                                                           vrep.simx_opmode_oneshot_wait)  # Retrieving Sensor position w.r.t Robot
             self.sensors_position[x - 1] = sensor_position
         # print('sensors_position', self.sensors_position)
-        # self.sensor_angles = angles_calcu(self.sensors_position[:, 1], self.sensors_position[:, 0], 0.0, 0.0)
-        self.sensor_angles = np.array([90, 45, 0, -45, -90, -135, 180, 135]) * (
-                math.pi / 180)  # Angles of Sensors w.r.t direction axis
+        # mag, self.sensor_angles = angles_calcu(self.sensors_position[:, 1], self.sensors_position[:, 0], 0.0, 0.0)
+        #self.sensor_angles = np.array([90, 45, 0, -45, -90, -135, 180, 135]) * (
+                #math.pi / 180)  # Angles of Sensors w.r.t direction axis
+        self.sensor_angles = np.array([-88.80256321, -50.3427192, -1.24791524, 45.4932798,
+               95.0678522, 133.79454788, 178.85683315, -133.50366118])
         # print('sensor_angles', self.sensor_angles)
         self.errorCode, self.left_motor_handle = vrep.simxGetObjectHandle(clientID,
                                                                           'ePuck_leftJoint' + self.robot_number,
@@ -564,7 +653,7 @@ class Robot1:
             #elif self.currrent_gradient == 0.0 and self.det_rob:  # not all(v == False for v in self.det_rob):  # Move backword
                 #v_l = self.currrent_gradient * 30
                 #v_r = self.currrent_gradient * 30
-                #rot_time = 1'''
+                #rot_time = 1
             else: # self.r_rot:  #  Move Randomly straight
                 v_l = 2.5
                 v_r = 2.5
@@ -599,4 +688,4 @@ class Robot1:
                                                          vrep.simx_opmode_oneshot)
         self.errorCode = vrep.simxSetJointTargetVelocity(self.clientID, self.right_motor_handle, 0.0,
                                                          vrep.simx_opmode_oneshot)
-        time.sleep(t)
+        time.sleep(t)'''

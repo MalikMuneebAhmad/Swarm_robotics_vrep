@@ -42,4 +42,15 @@ def angles_calcu(sensor_x, sensor_y, robot_x, robot_y): # function for calculati
     grad_x = (sensor_x - robot_x)
     grad_y = (sensor_y - robot_y)
     angles = np.arctan2(grad_y, grad_x)
-    return angles
+    #print('Calculation of angles in functon', angles)
+    mag = np.sqrt(grad_x**2 + grad_y**2)
+    return mag, angles
+
+def resultant_vector(magnitude, angles): #  vectors summation
+    fx = magnitude * np.cos(angles)
+    fy = magnitude * np.sin(angles)
+    #print('force x compo = ', fx)
+    #print('force y compo = ', fy)
+    fres_x = np.sum(fx)
+    fres_y = np.sum(fy)
+    return fres_x, fres_y

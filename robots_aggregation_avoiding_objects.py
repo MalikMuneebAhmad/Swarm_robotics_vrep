@@ -11,13 +11,10 @@ from robot_epuck import Robot  # Robot library
 from utlis import *
 
 
-# ----------------My Functions----------------#
-
 #-------------------------6-6-2021----------------------#
 # Robot aggregation with Aggregation_back_surface, Aggregation_robots_0.3ultrasonic working fine with
 # e_puck_aggregation_ultrasonic V-rep file
 # File include feature of robot aggregation avoiding obstacle with DC regulation mechanism
-
 
 vrep.simxFinish(-1)  # just in case, close all opened connections
 clientID = vrep.simxStart('127.0.0.1', 19999, True, True, 5000, 5)
@@ -60,6 +57,7 @@ while current_time - loop_start_time < 1200:  # Main loop
         rob_iter[i] += 1
         sensor_raw1, det_state1 = robots[i].ultrasonic_values()  # sensor readings
         robots[i].sensor_mod_values(0.1, 0.2)  # modify sensor readings
+        robots[i].sensor_avoidance_values(0.2, 0.25)
         obj_theta = robots[i].object_avoidance(robots[i].static_object_handles, 0.2)  # check for object avoidance and calculation of angle
         all_grad, max_grad = robots[i].chemotaxis_gradient()  # gradient to move the robots
         rob_status[i] = reg_mech[i].no_neigh_rob(2, 0.08, robots[i].det_rob)  # measure maturity of DC

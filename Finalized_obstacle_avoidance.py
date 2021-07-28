@@ -31,19 +31,20 @@ plt.ylim([-10, 10])
 # --------------------Initial Code To Connect with V-REP--------------------#
 
 vrep.simxFinish(-1)  # just in case, close all opened connections
-clientID = vrep.simxStart('127.0.0.1', 19999, True, True, 5000, 5)
+clientID = vrep.simxStart('127.0.0.1', 19997, True, True, 5000, 5)
 if clientID != -1:  # check if client connection successful
     print('Connected to remote API server')
+    vrep.simxSynchronous(clientID, True)
     returnCode = vrep.simxAddStatusbarMessage(clientID, 'Connected to remote API python', vrep.simx_opmode_oneshot)
 else:
     print('Connection not successful')
-    sys.exit('Could not connect')
+    sys.exit()
 
 # -------------------get the handles of Ultrasonic sensors and motors-----------------#
 
 errorCode, object_handle = vrep.simxGetObjectHandle(clientID, 'Cuboid4', vrep.simx_opmode_blocking)
 # Robot Handle and its position initialization function
-errorCode, robot_handle = vrep.simxGetObjectHandle(clientID, 'Pioneer_p3dx' + str(),
+errorCode, robot_handle = vrep.simxGetObjectHandle(clientID, 'Pioneer_p3dx' + str(2),
                                                    vrep.simx_opmode_oneshot_wait)
 # print('Robot Handler', robot_handle)
 returnCode, robot_position = vrep.simxGetObjectPosition(clientID, robot_handle, -1, vrep.simx_opmode_streaming)
@@ -107,7 +108,7 @@ while t < 120:
     sensor_values = np.round(sensor_values, 2)
     sensor_angles = angles_calcu(sensors_position[:, 0], sensors_position[:, 1], 0.0, 0.0)
     print('Sensor Angles', sensor_angles * 180/math.pi)
-        force_co_efficient = -(maxDetectionDist - sensor_values)
+    force_co_efficient = -(maxDetectionDist - sensor_values)
     fx = force_co_efficient * np.cos(sensor_angles)
     fy = force_co_efficient * np.sin(sensor_angles)
     fres_x = np.sum(fx)

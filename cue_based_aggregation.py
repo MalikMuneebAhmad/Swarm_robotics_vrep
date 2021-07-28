@@ -1,5 +1,6 @@
 import sim as vrep  # V-rep library
 import sys
+import pickle
 import time  # used to keep track of time
 import psutil
 from regulation_mechanism import Modc
@@ -9,6 +10,7 @@ import matplotlib.pyplot as plt
 import math
 import random
 from utlis import *
+import pickle
 
 
 # ----------------My Functions----------------#
@@ -43,9 +45,11 @@ else:
     sys.exit('Could not connect')
 
 current_time = time.time()
-num_robots = 15
-robots = [Robot(clientID, 'ePuck#' + str(num), 'ePuck_proxSensor#' + str(num))
-          for num in range(num_robots)]
+#robots = [Robot(clientID, 'ePuck#' + str(num), 'ePuck_proxSensor#' + str(num))
+          #for num in range(num_robots)]
+with open('robot_file', 'rb') as f:  # to generate your own file  (rb for wrting in bytes)
+    robots = pickle.load(f)  # storing variable into file
+num_robots = len(robots)
 start_time = [float(0.0)] * num_robots
 v_l = [float(0.0)] * num_robots
 v_r = [float(0.0)] * num_robots
@@ -72,7 +76,7 @@ while current_time - loop_start_time < 900:
         sensor_raw1, det_state1 = robots[m].ultrasonic_values()
         # print('Detection- -----States1', det_state1)
         robots[m].sensor_mod_values(0.125, 0.175)
-        robots[m].sensor_avoidance_values(0.15)
+        robots[m].sensor_avoidance_values(0.2, 0.25)
         ir_value, pre_red = robots[m].vision_sensor()
         front_ir_value = robots[m].front_vision_sensor()
         print('front_ir_value', front_ir_value)
