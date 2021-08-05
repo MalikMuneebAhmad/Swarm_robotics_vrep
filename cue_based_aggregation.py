@@ -78,7 +78,7 @@ while current_time - loop_start_time < 900:
         robots[m].sensor_mod_values(0.125, 0.175)
         robots[m].sensor_avoidance_values(0.2, 0.25)
         ir_value, pre_red = robots[m].vision_sensor()
-        front_ir_value = robots[m].front_vision_sensor()
+        ir_raw, front_ir_value = robots[m].front_vision_sensor()
         print('front_ir_value', front_ir_value)
         #grad_ir[m] = ir_value - front_ir_value
         grad_ir[m] = ir_value - pre_ir[m]

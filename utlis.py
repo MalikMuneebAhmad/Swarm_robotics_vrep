@@ -12,6 +12,9 @@ def center_mass_dist(rob_position):  # function for calculating distances of mas
     return dist_robots
 
 
+clamp = lambda n, minn, maxn: max(min(maxn, n), minn)
+
+
 def cluster(robots_pos, robots_det_rob):  # Calculate position and detected robot of a robot
     robots_detrob_dic = dict()
     robots_pos_dic = dict()
@@ -54,3 +57,19 @@ def resultant_vector(magnitude, angles): #  vectors summation
     fres_x = np.sum(fx)
     fres_y = np.sum(fy)
     return fres_x, fres_y
+
+
+# inputs are: all robot handles, handle acquire by concern robot, State of all robots present in gradient or black
+# Output: Binary - true when any detecting robot in gradient area, false when all detecting robots in black area
+# Function will be utilized for flocking behavior
+def gradient_rob_nei(robot_handles, sensor_acq_handle, robot_present_loc, concerned_rob_alocation):
+    if not concerned_rob_alocation:  # robot in black area
+        detected_robot = set(robot_handles).intersection(set(sensor_acq_handle))  # detected thing is robot
+        detected_rob_num = [robot_handles.index(m) for m in detected_robot]  # extract robot number from handle
+        nei_rob_loc = [robot_present_loc[rob_num] for rob_num in detected_rob_num]
+        response = True in nei_rob_loc
+        leader = detected_rob_num[nei_rob_loc.index(True)] if response else -1
+    else:
+        response = False
+        leader = -1
+    return response, leader

@@ -53,11 +53,15 @@ class Robot:
         self.r_rot = False  # Condition to regulate random motion
         self.levy_var = int(0)  # To count the number of straight
         self.no_nei = int()
+        self.semi_mature_flock = False  # Condition for semi mature behavior in flocking
         self.thetas = {0: 0.0, 1: 45, 2: 90, 3: 135, 4: 180, 5: -135, 6: -90,
                        7: -45}  # Dictionary to assign specific angle
         self.theta = 0.0  # Angle of rotation of robot
         self.l = 0.053  # Distance Between two wheels
         self.r = 0.0199535  # Redius of Wheels
+        self.detected_object_handles = [0] * self.num_sensors
+        self.front_ok = False
+        self.presence_in_gradient = False
 
         # -------------------get the handles of Ultrasonic sensors and motors-----------------#
         # Robot Handle and its position initialization function
@@ -111,9 +115,12 @@ class Robot:
                 self.clientID, self.sensor_handles[s - 1],
                 vrep.simx_opmode_streaming + 000)  # Measure distance using Ultrasonic Sensor
             self.detectionStates[s - 1] = detectionState  # Sensor state detecting or not
+            self.detected_object_handles[s - 1] = detectedObjectHandle
             # print('detectedObjectHandle', detectedObjectHandle)
             if not detectionState:  # To overcome out of bound distance problem
                 detectedPoint = [0.0] * 3
+                if s == 2:
+                    self.front_ok = True
                 self.det_obj_handles[s - 1] = 0
                 self.sensors_detecting[s - 1] = -1
             else:  # when point is connected either it is a robot or an object
@@ -155,7 +162,7 @@ class Robot:
         #returnCode, resolution, image = vrep.simxGetVisionSensorImage(self.clientID, self.front_Vision_sensor, 2,
                                                                       #vrep.simx_opmode_streaming + 5)
         # ir_sensor_value = 0 if image == [0] else 1
-        return ir_sensor_value
+        return ir_sensor_raw_value, ir_sensor_value
 
     def read_vision_sensor(self):
         for s in range(1, self.num_sensors + 1):
@@ -164,7 +171,7 @@ class Robot:
             #print('vision_snsor return code', self.returnCode)
             #print('detectidonState', detectidonState)
             #print('auxPackets', auxPackets)
-            auxPackets = [[1] * 15] if auxPackets == [] else auxPackets
+            auxPackets = [[0] * 15] if auxPackets == [] else auxPackets
             self.vision_sensor_values[s-1] = auxPackets[0][1]
         #print(' All Vision values', self.vision_sensor_values)
         return self.vision_sensor_values
@@ -255,7 +262,7 @@ class Robot:
             freq = [simulation.count(i) for i in range(8)]  # Count the occuring of each number(event)
             directions = np.array([float(i * j) for i, j in zip(p_array, freq)])'''  # Possibility of each direction
             suitable_theta = np.argmax(p_array)  # Select the maximum likelihood direction
-            theta = (self.thetas[suitable_theta] * math.pi / 180)
+            theta = self.thetas[suitable_theta] * math.pi / 180
         return max_grad, theta
 
     def flock_com(self, target_value, target_theta, weight_forces, weight_target):  # Input is target point location (in terms of vector)
@@ -267,6 +274,38 @@ class Robot:
         com_x = (weight_forces * f_res_x / self.no_nei) + (weight_target * target_x)
         com_y = (weight_forces * f_res_y / self.no_nei) + (weight_target * target_y)
         return com_x, com_y
+
+    def straight_gradient_movement(self):
+        v_l = 0
+        v_r = 0
+        rot_time = 0
+        front_value = self.sensor_values[2]
+        rare_value = self.sensor_values[6]
+        print('self.detectionStates', self.detectionStates[2])
+        if not self.front_ok:
+            front_value = 0.3
+        currrent_gradient = front_value - rare_value
+        if currrent_gradient > 0.0 and (
+        not self.det_obj_handles[2] in self.static_object_handles):  # Move straight
+            gradient = 0.07 if currrent_gradient < 0.07 else self.currrent_gradient
+            v_l = gradient * 50
+            v_r = gradient * 50
+            rot_time = 2
+            print('Robot Movement with {} and {} in the case of +ve current gradient '.format(v_r, v_l))
+            # print('Robot will move straight with time {} and velocities {} and {}'.format(rot_time, v_r, v_l))
+        elif currrent_gradient < 0.0 and (
+        not self.det_obj_handles[6] in self.static_object_handles):  # Move backword
+            gradient = - 0.07 if self.currrent_gradient > -0.07 else self.currrent_gradient
+            v_l = currrent_gradient * 10
+            v_r = currrent_gradient * 10
+            rot_time = 2
+            print('Robot Movement with {} and {} in the case of -ve current gradient '.format(v_r, v_l))
+            # print('Robot will move backword with time {} and velocities {} and {}'.format(rot_time, v_r, v_l))
+        elif currrent_gradient == 0.0 and self.det_rob:  # condition to stop the robot at specific distace
+            v_l = 4
+            v_r = 4
+            rot_time = 2
+        return v_l, v_r, rot_time
 
     def current_com(self, comp_x, comp_y, theta, pos):  # Convert previous COM into current frame of seference
         pos_x, pos_y = resultant_vector(pos, theta)
@@ -315,7 +354,7 @@ class Robot:
             theta = (self.thetas[suitable_theta] * math.pi / 180)
         return theta
 
-    def displacement_robot(self, s): # give s in unit of meters
+    def displacement_robot(self, s):  # give s in unit of meters
         disp_time = 1.0
         v = (s * 2.372) / (self.r * disp_time)
         if v > self.vmax:
@@ -326,7 +365,8 @@ class Robot:
         return v_l, v_r, disp_time
 
     def rotation_robot(self, theta, reg_fac):
-        rot_time = random.uniform(1.0, 2.0)
+        #rot_time = random.uniform(1.0, 2.0)
+        rot_time = 1.5
         v = abs(0.053 * theta) / (2 * rot_time * self.r) * reg_fac
         if v > self.vmax:
             v = self.vmax
