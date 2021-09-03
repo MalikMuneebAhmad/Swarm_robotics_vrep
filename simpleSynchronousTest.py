@@ -38,7 +38,7 @@ if clientID!=-1:
     sim.simxSynchronous(clientID,True)
 
     # start the simulation:
-    sim.simxStartSimulation(clientID,sim.simx_opmode_blocking)
+    sim.simxStartSimulation(clientID, sim.simx_opmode_blocking)
 
     # Now step a few times:
     for i in range(1,10):
