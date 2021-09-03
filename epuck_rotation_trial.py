@@ -29,6 +29,7 @@ print('returnCode', returnCode)
 current_time = time.time()
 vrep.simxStartSimulation(clientID, vrep.simx_opmode_blocking)
 loop_start_time = time.time()
+exp_pre_orien = [0.0] * num_robots  # expected robot position in previous trial
 start_time = [float(0.0)] * num_robots
 v_l = [float(0.0)] * num_robots  # left wheel angular velocity
 v_r = [float(0.0)] * num_robots  # right wheel angular velocity
@@ -39,18 +40,31 @@ while current_time - loop_start_time < 200:  # Main loop
     rob = list(range(num_robots))  # To run the execution in third loop (while)
     for i in range(num_robots):  # measure control parameter for each robot
         print('Robot number = ', i)
-        rot_theta = math.pi
+        rot_theta = math.pi/2
+        rob_pos, rob_dist, rob_orien = robots[i].get_position()  # current orienation
+        exp_pre_orien[i] = rob_orien if exp_pre_orien[i] == 0.0 else exp_pre_orien[i]
+        diff_angle = math.pi - abs(abs(exp_pre_orien[i] - rob_orien) - math.pi)
+        print('Robot orientation is', rob_orien * 180 / math.pi)
+        print('Expected orientation is', exp_pre_orien[i] * 180 / math.pi)
+        reg_fac = 1 + abs(diff_angle / exp_pre_orien[i])
+        print('regulation_fac', reg_fac)
+        exp_pre_orien[i] = rob_orien + rot_theta  # update previous orientation for next iteration'''
         if str_mov[i]:
             print('Robot is rotating')
-            v_l[i], v_r[i], rot_t[i] = robots[i].rotation_robot(rot_theta)
+            print('regulation factor', reg_fac)
+            v_l[i], v_r[i], rot_t[i] = robots[i].rotation_robot(rot_theta, reg_fac)
+            #vrep.simxAddStatusbarMessage(clientID, 'Robot rotation command', vrep.simx_opmode_oneshot)
             str_mov[i] = False
         else:
             print('Robot is moving straight')
             v_l[i], v_r[i], rot_t[i] = robots[i].random_comp_straight(1, 1)
+            vrep.simxAddStatusbarMessage(clientID, 'Robot straight movement command', vrep.simx_opmode_oneshot)
             str_mov[i] = True
     time.sleep(2)
     for j in range(num_robots):  # Starting movement of all robots Loop
         robots[j].movement(v_l[j], v_r[j])
+        print('Left velocity', v_l[j])
+        print('right velocity', v_r[j])
         start_time[j] = time.time()  # Calculation of start time
     while rob:  # Loop will end when 'rob' list will be empty
         current_time = time.time()
@@ -64,4 +78,4 @@ while current_time - loop_start_time < 200:  # Main loop
     #for i in range(num_robots):
         #robots_position[i] = robots[i].get_position()
     t += 1
-vrep.simxPauseCommunication(clientID, False)
+vrep.simxPauseCommunication(clientID, True)

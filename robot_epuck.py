@@ -49,6 +49,7 @@ class Robot:
         for i in ob_num:  # Loop to acquire Handles of all objects
             errorCode, object_handle = vrep.simxGetObjectHandle(clientID, 'Cuboid' + i, vrep.simx_opmode_blocking)
             self.static_object_handles.append(object_handle)
+        self.static_object_handles = [i for i in self.static_object_handles if i != 0]
         self.vmax = float(5)  # Maximum angular speed of robot
         self.r_rot = False  # Condition to regulate random motion
         self.levy_var = int(0)  # To count the number of straight
@@ -60,6 +61,7 @@ class Robot:
         self.l = 0.053  # Distance Between two wheels
         self.r = 0.0199535  # Redius of Wheels
         self.detected_object_handles = [0] * self.num_sensors
+        self.front_sensor_ok = False
         self.front_ok = False
         self.presence_in_gradient = False
 
@@ -120,7 +122,7 @@ class Robot:
             if not detectionState:  # To overcome out of bound distance problem
                 detectedPoint = [0.0] * 3
                 if s == 2:
-                    self.front_ok = True
+                    self.front_sensor_ok = True
                 self.det_obj_handles[s - 1] = 0
                 self.sensors_detecting[s - 1] = -1
             else:  # when point is connected either it is a robot or an object
@@ -132,11 +134,13 @@ class Robot:
                     self.det_rob.append(detectedObjectHandle)
                     self.sensors_detecting[s - 1] = 1
             dist = np.linalg.norm(detectedPoint)  # Calculation of distance
+            #print(detectedPoint)
             self.sensor_raw_values[s - 1] = dist
         # self.sensor_values = np.round(self.sensor_values, 2)
         self.sensor_raw_values = np.round(self.sensor_raw_values, 2)
         # print('sensor raw values', self.sensor_raw_values)
         self.no_nei = len(self.det_rob)
+        self.front_ok = np.count_nonzero(self.sensors_detecting[:5] == 1) < 2
         return self.sensor_raw_values, self.detectionStates
 
     def vision_sensor(self):
@@ -275,35 +279,53 @@ class Robot:
         com_y = (weight_forces * f_res_y / self.no_nei) + (weight_target * target_y)
         return com_x, com_y
 
-    def straight_gradient_movement(self):
+    def backward_leader_move(self, factor):
+        back_active_sensor = 6 if self.sensors_detecting[6] == 1 else 5 if self.sensors_detecting[5] == 1 else 7
+        #if self.sensor_raw_values[back_active_sensor] > 0.125:
+        current_gra = - self.sensor_values[back_active_sensor]
+        #current_gra = - 0.07 if current_gra > -0.07 else current_gra
+        v_l = current_gra * factor
+        v_r = current_gra * factor
+        rot_time = 2
+        print('Robot is moving backword')
+        return v_l, v_r, rot_time
+
+    def straight_gradient_movement(self, factor, target_loc):
         v_l = 0
         v_r = 0
         rot_time = 0
-        front_value = self.sensor_values[2]
-        rare_value = self.sensor_values[6]
-        print('self.detectionStates', self.detectionStates[2])
-        if not self.front_ok:
-            front_value = 0.3
+        #if normal = True:
+        if self.front_sensor_ok and target_loc: #and self.front_ok:
+            front_value = 0.06
+            rare_value = self.sensor_values[6] * self.sensors_detecting[6]
+        else:
+            front_value = self.sensor_values[2] * self.sensors_detecting[2]
+            rare_value = self.sensor_values[6] * self.sensors_detecting[6]
+        #print('front_value is ', front_value)
+        #print('rare_value is ', rare_value)
         currrent_gradient = front_value - rare_value
+        #print('currrent_gradient is ', currrent_gradient)
+        #print('Front Condition for gradient movement', not self.det_obj_handles[2] in self.static_object_handles)
+        #print('back Condition for gradient movement', not self.det_obj_handles[6] in self.static_object_handles)
         if currrent_gradient > 0.0 and (
         not self.det_obj_handles[2] in self.static_object_handles):  # Move straight
-            gradient = 0.07 if currrent_gradient < 0.07 else self.currrent_gradient
-            v_l = gradient * 50
-            v_r = gradient * 50
+            gradient = 0.07 if currrent_gradient < 0.07 else currrent_gradient
+            v_l = gradient * factor
+            v_r = gradient * factor
             rot_time = 2
             print('Robot Movement with {} and {} in the case of +ve current gradient '.format(v_r, v_l))
             # print('Robot will move straight with time {} and velocities {} and {}'.format(rot_time, v_r, v_l))
         elif currrent_gradient < 0.0 and (
         not self.det_obj_handles[6] in self.static_object_handles):  # Move backword
-            gradient = - 0.07 if self.currrent_gradient > -0.07 else self.currrent_gradient
-            v_l = currrent_gradient * 10
-            v_r = currrent_gradient * 10
+            gradient = - 0.07 if currrent_gradient > -0.07 else currrent_gradient
+            v_l = gradient * factor
+            v_r = gradient * factor
             rot_time = 2
             print('Robot Movement with {} and {} in the case of -ve current gradient '.format(v_r, v_l))
             # print('Robot will move backword with time {} and velocities {} and {}'.format(rot_time, v_r, v_l))
         elif currrent_gradient == 0.0 and self.det_rob:  # condition to stop the robot at specific distace
-            v_l = 4
-            v_r = 4
+            v_l = 0
+            v_r = 0
             rot_time = 2
         return v_l, v_r, rot_time
 
@@ -431,7 +453,7 @@ class Robot:
         front_sensor_pos = np.zeros(3) if np.all(front_sensor_pos == 0) else front_sensor_pos
         disp, dir_rob_wax = angles_calcu(front_sensor_pos[0], front_sensor_pos[1], self.robot_position[0], self.robot_position[1])  # get pos of front sensor w.r.t world frame of ref
 
-        return self.robot_position[0:2], disp, dir_rob_wax
+        return list(self.robot_position[0:2]), disp, dir_rob_wax
 
     def neighbor_check(self):
         nei_status = False
