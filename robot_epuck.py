@@ -4,6 +4,7 @@ import time  # used to keep track of time
 import numpy as np  # array library
 import math
 import random
+import itertools
 import datetime
 import psutil
 from utlis import *
@@ -42,14 +43,26 @@ class Robot:
         self.currrent_gradient = float()  # Gradient along the heading direction
         self.det_obj_handles = [0] * self.num_sensors  # Handles acquired by all sensors of a robot
         self.static_object_handles = list()  # All objects handles who need to be avoided
+        self.food_handles = []  # All food handles who need to be searched out
+        self.food_picked = False  # Status an object carrying food or not
         self.det_rob = list()  # Handles of robots detected by a robot
         self.det_obj = list()  # Handles of objects detected by a robot
         self.obj_avoid = False  # Condition to Regulate Object Avoidance
+        self.errorCode, self.ref_frame_handle = vrep.simxGetObjectHandle(clientID, 'ReferenceFrame', vrep.simx_opmode_blocking)   # get handles of reference frame
+        self.foods_pos = []  # Position of food in arena
         ob_num = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']  # name of objects
         for i in ob_num:  # Loop to acquire Handles of all objects
             errorCode, object_handle = vrep.simxGetObjectHandle(clientID, 'Cuboid' + i, vrep.simx_opmode_blocking)
             self.static_object_handles.append(object_handle)
         self.static_object_handles = [i for i in self.static_object_handles if i != 0]
+        food_items = [str(i) for i in range(20)]
+        for i in food_items:  # Loop to acquire Handles of all objects
+            errorCode, food_handle = vrep.simxGetObjectHandle(clientID, 'Food' + i, vrep.simx_opmode_blocking)
+            self.food_handles.append(food_handle)
+        self.food_handles = [i for i in self.food_handles if i != 0]
+        '''for food_handle in self.food_handles:  # loop to acquire position of food
+            returnCode, food_pos = vrep.simxGetObjectPosition(clientID, food_handle, self.ref_frame_handle, vrep.simx_opmode_blocking)
+            self.foods_pos.append(food_pos[:2])'''
         self.vmax = float(5)  # Maximum angular speed of robot
         self.r_rot = False  # Condition to regulate random motion
         self.levy_var = int(0)  # To count the number of straight
@@ -180,6 +193,16 @@ class Robot:
         #print(' All Vision values', self.vision_sensor_values)
         return self.vision_sensor_values
 
+    def pick_food_object(self, food_handle):  # Pick food during foraging
+        self.returnCode = vrep.simxSetObjectParent(self.clientID, food_handle, self.robot_handle, False, vrep.simx_opmode_oneshot)
+        self.returnCode = vrep.simxSetObjectPosition(self.clientID, food_handle, vrep.sim_handle_parent , [0.1, 0, 0], vrep.simx_opmode_oneshot)
+        self.food_picked = True
+
+    def drop_food_object(self, food_handle):  # Drop food during foraging
+        self.returnCode = vrep.simxSetObjectParent(self.clientID, food_handle, -1, False, vrep.simx_opmode_oneshot)
+        self.returnCode = vrep.simxSetObjectPosition(self.clientID, food_handle, self.robot_handle , [0, 0, 0.3], vrep.simx_opmode_oneshot)
+        self.food_picked = False
+
     def send_signal(self):
         self.returnCode = vrep.simxSetIntegerSignal(self.clientID, 'Presence', self.ir_sensor_value, vrep.simx_opmode_oneshot)
 
@@ -290,7 +313,7 @@ class Robot:
         print('Robot is moving backword')
         return v_l, v_r, rot_time
 
-    def straight_gradient_movement(self, factor, target_loc):
+    def straight_gradient_movement(self, factor, target_loc):  # used in flocking
         v_l = 0
         v_r = 0
         rot_time = 0
@@ -442,10 +465,10 @@ class Robot:
         self.returnCode = vrep.simxSetObjectPosition(self.clientID, self.robot_handle, -1, pos_array,
                                                                           vrep.simx_opmode_oneshot)
 
-    def get_position(self):
-        self.returnCode, self.robot_position = vrep.simxGetObjectPosition(self.clientID, self.robot_handle, -1,
+    def get_position(self, frame_ref):
+        self.returnCode, self.robot_position = vrep.simxGetObjectPosition(self.clientID, self.robot_handle, frame_ref,
                                                 vrep.simx_opmode_streaming)  # robot pos w.r.t world frame of reference
-        self.returnCode, front_sensor_pos = vrep.simxGetObjectPosition(self.clientID, self.sensor_handles[2], -1,
+        self.returnCode, front_sensor_pos = vrep.simxGetObjectPosition(self.clientID, self.sensor_handles[2], frame_ref,
                                                 vrep.simx_opmode_streaming)  # front sensor pos w.r.t world frame of reference
         self.robot_position = np.array(self.robot_position)
         front_sensor_pos = np.array(front_sensor_pos)

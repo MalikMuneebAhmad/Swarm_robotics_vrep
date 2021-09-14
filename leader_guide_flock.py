@@ -58,7 +58,7 @@ while flock_perf > target_flock_perf:
     rob = list(range(num_robots))  # To run the execution in third loop (while)
     #----------------Calculate inflammation in each iteration------------#
     for l in range(num_robots):
-        robots_position[l], disp, dir_rob_wax = robots[l].get_position()
+        robots_position[l], disp, dir_rob_wax = robots[l].get_position(-1)
     comb_clusters, size_clusters, main_cluster, max_cluster_size = flock_members(robots_position, 0.35)
     target_flock_perf = interp(max_cluster_size, [1, 15], [0.4, 0.6])  # For diagnol movement limits are (0.15 - 0.55) otherwisw (0.05 - 0.45)
     target_spat = interp(max_cluster_size, [1, 15], [0.3, 0.5])
@@ -157,7 +157,7 @@ while flock_perf > target_flock_perf:
             prev_cal_angle[i].append(curr_com_angle)  #  update variable of previous com angle
             rot_theta = - curr_com_angle
             # ---------------orientation of robot and rotation regulation factor-----------#
-            rob_pos, rob_dist, rob_orien = robots[i].get_position()  # current orienation
+            rob_pos, rob_dist, rob_orien = robots[i].get_position(-1)  # current orienation
             exp_pre_orien[i] = rob_orien if exp_pre_orien[i] == 0.0 else exp_pre_orien[i]
             diff_angle = math.pi - abs(abs(exp_pre_orien[i] - rob_orien) - math.pi)
             #print('Robot orientation is', rob_orien * 180 / math.pi)

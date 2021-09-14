@@ -171,7 +171,7 @@ while current_time - loop_start_time < 900:
         robots_det_rob = robots_det_rob + (len(robots[l].det_rob))
     infla.append(1 - robots_det_rob / 45)
     for i in range(num_robots):
-        robots_position[i] = robots[i].get_position()
+        robots_position[i], rob_dist[i], rob_orien[i] = robots[i].get_position(-1)
     spat_fitness.append(fitness_aggregation(robots_position))
     t = t + 1
 

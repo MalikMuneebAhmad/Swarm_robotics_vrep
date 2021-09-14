@@ -35,7 +35,7 @@ class Chemotaxis:
                                         self.chemokines[k][j];
         return self.chemokines
 
-    def chemo_attractants(self,neighbor_hood, bac_x, bac_y, c1, c2, diffusion): # Most suitable c1 = 0.125, c2 = 0.02, diffusion = 0.25
+    def chemo_attractants(self, neighbor_hood, bac_x, bac_y, c1, c2, diffusion): # Most suitable c1 = 0.125, c2 = 0.02, diffusion = 0.25
         x_arr = np.arange(2, self.arena_x-2)
         y_arr = np.arange(2, self.arena_y-2)
         all_idx = list(itertools.product(x_arr, y_arr))

@@ -13,7 +13,7 @@ else:
     print('Connection not successful')
     sys.exit('Could not connect')
 robots = [Robot(clientID, 'ePuck#' + str(num), 'ePuck_proxSensor#' + str(num))
-          for num in range(12)]
+          for num in range(6)]
 with open('robot_file', 'wb') as f:  # to generate your own file  (wb for wrting in bytes)
     pickle.dump(robots, f)  # storing variable into file
 

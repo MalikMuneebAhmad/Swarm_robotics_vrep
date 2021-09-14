@@ -66,7 +66,7 @@ while current_time - loop_start_time < 200:  # Main loop
             prev_cal_angle[i].append(curr_com_angle)  # update variable of previous com angle
             rot_theta = - curr_com_angle
             # ---------------orientation of robot and rotation regulation factor-----------#
-            rob_pos, rob_dist, rob_orien = robots[i].get_position()  # current orienation
+            rob_pos, rob_dist, rob_orien = robots[i].get_position(-1)  # current orienation
             exp_pre_orien[i] = rob_orien if exp_pre_orien[i] == 0.0 else exp_pre_orien[i]
             diff_angle = math.pi - abs(abs(exp_pre_orien[i] - rob_orien) - math.pi)
             print('Robot orientation is', rob_orien * 180 / math.pi)
@@ -109,6 +109,6 @@ while current_time - loop_start_time < 200:  # Main loop
                 rob.remove(k)
                 robots[k].wait(0.0)  # Stop of robot
     # for i in range(num_robots):
-    # robots_position[i] = robots[i].get_position()
+    # robots_position[i], rob_dist[i], rob_orien[i] = robots[i].get_position(-1)
     t += 1
 vrep.simxPauseCommunication(clientID, False)
