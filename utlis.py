@@ -153,17 +153,17 @@ def cartesian_im_trans(ran_x, ran_y, size_pix, coord_obj_plac):
     chemo_array = np.zeros([ran_x_pix, ran_y_pix])  # mask
     pix_obj_plac = np.array(coord_obj_plac) / size_pix
     pix_obj_plac = pix_obj_plac.astype(int)
-    for i in range(len(pix_obj_plac)):
-        chemo_array[pix_obj_plac[i][0], pix_obj_plac[i][1]] = 100
-    return chemo_array, pix_obj_plac
+    return ran_x_pix, ran_y_pix, pix_obj_plac
 
 
-def chemotaxis_gradient_forging(chem_im, neighbor_hood, c1, c2, diffusion):  # Most suitable c1 = 0.125, c2 = 0.02, diffusion = 0.25
+def chemotaxis_gradient_forging(chem_im, pos_bacteria, neighbor_hood, c1, c2, diffusion, rate):  # Most suitable c1 = 0.125, c2 = 0.02, diffusion = 0.25
     arena_x, arena_y = chem_im.shape  # extract size of mask
     x_arr = np.arange(2, arena_x - 2)
     y_arr = np.arange(2, arena_y - 2)
     all_idx = list(itertools.product(x_arr, y_arr))
     C = np.array(chem_im)
+    for i, pos_bac in enumerate(pos_bacteria):
+        chem_im[pos_bac[0]][pos_bac[1]] = chem_im[pos_bac[0]][pos_bac[1]] + rate
     for idx in all_idx:
         k = idx[0]
         j = idx[1]
@@ -172,7 +172,7 @@ def chemotaxis_gradient_forging(chem_im, neighbor_hood, c1, c2, diffusion):  # M
                     C[k + 1][j] + C[k - 1][j] + C[k][j + 1] + C[k][j - 1]) + c2 * (
                                             C[k - 2][j] + C[k - 1][j - 1] + C[k][j - 2] + C[k + 1][j - 1] +
                                             C[k + 2][j] + C[k + 1][j + 1] + C[k][j + 2] + C[k - 1][
-                                                j + 1]) - diffusion * chem_im[k][j]
+                                                 j + 1]) - diffusion * chem_im[k][j]
         elif neighbor_hood == 'moore':
             chem_im[k][j] = 0.5 * chem_im[k][j] + c1 * (
                     C[k + 1][j] + C[k - 1][j] + C[k][j + 1] + C[k][j - 1]) + c2 * (
@@ -182,13 +182,13 @@ def chemotaxis_gradient_forging(chem_im, neighbor_hood, c1, c2, diffusion):  # M
 
 
 # Robot finding food or things in arena by sensing chemicals secreted by food.
-def chemotaxis_gradient_foraging(chemokines, monokines, rob_pos_mask):
+def chemotaxis_gradient_foraging(chemokines, monokines, rob_pos_mask, mono_factor):
     x = rob_pos_mask[0]
     y = rob_pos_mask[1]
-    gradx = (chemokines[x + 1][y] - chemokines[x - 1][y]) - 0.005 * (monokines[x + 1][y] - monokines[x - 1][y])
-    grady = (chemokines[x][y + 1] - chemokines[x][y - 1]) - 0.005 * (monokines[x][y + 1] - monokines[x][y - 1])
-    gradxy = (chemokines[x + 1][y + 1] - chemokines[x - 1][y - 1]) - 0.005 * (monokines[x + 1][y + 1] - monokines[x - 1][y - 1])
-    gradyx = (chemokines[x - 1][y + 1] - chemokines[x + 1][y - 1]) - 0.005 * (monokines[x - 1][y + 1] - monokines[x + 1][y - 1])
+    gradx = (chemokines[x + 1][y] - chemokines[x - 1][y]) - mono_factor * (monokines[x + 1][y] - monokines[x - 1][y])
+    grady = (chemokines[x][y + 1] - chemokines[x][y - 1]) - mono_factor * (monokines[x][y + 1] - monokines[x][y - 1])
+    gradxy = (chemokines[x + 1][y + 1] - chemokines[x - 1][y - 1]) - mono_factor * (monokines[x + 1][y + 1] - monokines[x - 1][y - 1])
+    gradyx = (chemokines[x - 1][y + 1] - chemokines[x + 1][y - 1]) - mono_factor * (monokines[x - 1][y + 1] - monokines[x + 1][y - 1])
     all_grad = np.array([gradx, grady, gradxy, gradyx])
     max_grad = np.max(abs(all_grad))
     if max_grad == 0.0:  # To overcome infinite array
