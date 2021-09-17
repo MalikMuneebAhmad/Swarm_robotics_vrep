@@ -53,7 +53,9 @@ for food_handle in food_handles:  # loop to acquire position of food
     returnCode, food_pos = vrep.simxGetObjectPosition(clientID, food_handle, robots[0].ref_frame_handle,
                                                       vrep.simx_opmode_blocking)
     foods_pos.append(food_pos[:2])
-chem_im, food_pos_im = cartesian_im_trans(3.1, 3.1, 0.025, foods_pos)
+arena_x, arena_y, food_pos_im = cartesian_im_trans(3.1, 3.1, 0.025, foods_pos)
+chem_im = np.zeros((arena_x, arena_y))
+mono_im = np.zeros((arena_x, arena_y))
 time_consume = []  # time consumed in each iteration (implementation of control parameters)
 inflammation = []  # sum of ir values of all robots for all iterations
 t = 0
@@ -64,10 +66,10 @@ while current_time - loop_start_time < 100:  # Main loop
     #----------------Calculate inflammation in each iteration------------#
     for i in range(num_robots):
         robots_position[i], rob_dist[i], rob_orien[i] = robots[i].get_position(robots[0].ref_frame_handle)  # Current orienation and position w.r.t frame of reference
-    mono_im, rob_pos_im = cartesian_im_trans(3.1, 3.1, 0.025, robots_position)  # Convert robots pos in pixels
+    arena_x, arena_y, rob_pos_im = cartesian_im_trans(3.1, 3.1, 0.025, robots_position)  # Convert robots pos in pixels
     #print('Robot Orientations are', np.array(rob_orien) * (180/math.pi))
-    mono_im = chemotaxis_gradient_forging(mono_im, 'von_neumann', 0.125, 0.021, 0.35)  # Updating chemo-taxis mask
-    chem_im = chemotaxis_gradient_forging(chem_im, 'von_neumann', 0.125, 0.021, 0.35)  # Updating chemo-taxis mask
+    mono_im = chemotaxis_gradient_forging(mono_im, rob_pos_im, 'von_neumann', 0.125, 0.021, 0.5, 100)  # Updating chemo-taxis mask
+    chem_im = chemotaxis_gradient_forging(chem_im, food_pos_im, 'von_neumann', 0.125, 0.021, 0.35, 100)  # Updating chemo-taxis mask
     #----------Loop to measure control parameter for each robot----------#
     for i in range(num_robots):
         print('Robot number = ', i)
@@ -106,11 +108,12 @@ while current_time - loop_start_time < 100:  # Main loop
                 chem_im[cap_food_pos[0]][cap_food_pos[1]] = 0.0  # Update chemo array
                 food_pos_im = np.delete(food_pos_im, index_cap_food, axis = 0)  # Remove the position of capture food
                 continue
-            all_grad, max_grad = chemotaxis_gradient_foraging(chem_im, mono_im, rob_pos_im[i])
+            all_grad, max_grad = chemotaxis_gradient_foraging(chem_im, mono_im, rob_pos_im[i], 0.001)
             chemo_theta = robots[i].rotational_angle(all_grad, max_grad, obj_theta)  #  Require diection of Robot calculated by chemotaxis
             rot_theta = ((chemo_theta - rob_orien[i]) + math.pi) % (2 * math.pi) - math.pi
+            disp_value = 0.0375 if chem_avg_value > 0.045 else 0.075  # displacement value inversely proportional to presence of chemical
             prev_cal_angle[i].append(rot_theta)  # update variable of previous angle
-            prev_cal_mag[i].append(0.075)   # update variable of previous com magnitude
+            prev_cal_mag[i].append(disp_value)   # update variable of previous  magnitude
         if str_mov[i] or robots[i].obj_avoid:  # robot will rotate for flocking or for obj avoid
             print('Robot is rotating')
             if prev_cal_angle[i]:  # to rotate towards food
@@ -151,7 +154,7 @@ while current_time - loop_start_time < 100:  # Main loop
     plt.imshow(mono_im, origin='lower')
     plt.show()
     t += 1
-vrep.simxPauseCommunication(clientID, False)
+vrep.simxStopSimulation(clientID, vrep.simx_opmode_blocking)
 plt.title('Food Location Plot')
 plt.xlabel('Y-axis')
 plt.ylabel('X-axis')
