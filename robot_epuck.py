@@ -44,7 +44,10 @@ class Robot:
         self.det_obj_handles = [0] * self.num_sensors  # Handles acquired by all sensors of a robot
         self.static_object_handles = list()  # All objects handles who need to be avoided
         self.food_handles = []  # All food handles who need to be searched out
+        self.nest_info = []  # robot having nest c-ordinates
         self.food_picked = False  # Status an object carrying food or not
+        self.first_food_picked = False  # For object clustering random object picked
+        self.first_food_dropped = False  # For object clustering first obj dropped near to another object
         self.det_rob = list()  # Handles of robots detected by a robot
         self.det_obj = list()  # Handles of objects detected by a robot
         self.obj_avoid = False  # Condition to Regulate Object Avoidance
@@ -60,6 +63,7 @@ class Robot:
             errorCode, food_handle = vrep.simxGetObjectHandle(clientID, 'Food' + i, vrep.simx_opmode_blocking)
             self.food_handles.append(food_handle)
         self.food_handles = [i for i in self.food_handles if i != 0]
+        self.picked_food_handle = int()  # picked food handle
         '''for food_handle in self.food_handles:  # loop to acquire position of food
             returnCode, food_pos = vrep.simxGetObjectPosition(clientID, food_handle, self.ref_frame_handle, vrep.simx_opmode_blocking)
             self.foods_pos.append(food_pos[:2])'''
@@ -195,13 +199,15 @@ class Robot:
 
     def pick_food_object(self, food_handle):  # Pick food during foraging
         self.returnCode = vrep.simxSetObjectParent(self.clientID, food_handle, self.robot_handle, False, vrep.simx_opmode_oneshot)
-        self.returnCode = vrep.simxSetObjectPosition(self.clientID, food_handle, vrep.sim_handle_parent , [0.1, 0, 0], vrep.simx_opmode_oneshot)
+        self.returnCode = vrep.simxSetObjectPosition(self.clientID, food_handle, vrep.sim_handle_parent, [0.1, 0, 0], vrep.simx_opmode_oneshot)
+        self.picked_food_handle = food_handle
         self.food_picked = True
 
-    def drop_food_object(self, food_handle):  # Drop food during foraging
-        self.returnCode = vrep.simxSetObjectParent(self.clientID, food_handle, -1, False, vrep.simx_opmode_oneshot)
-        self.returnCode = vrep.simxSetObjectPosition(self.clientID, food_handle, self.robot_handle , [0, 0, 0.3], vrep.simx_opmode_oneshot)
+    def drop_food_object(self):  # Drop food during foraging
+        self.returnCode = vrep.simxSetObjectParent(self.clientID, self.picked_food_handle, -1, False, vrep.simx_opmode_oneshot)
+        self.returnCode = vrep.simxSetObjectPosition(self.clientID, self.picked_food_handle, self.robot_handle, [0, 0, 0.15], vrep.simx_opmode_oneshot)
         self.food_picked = False
+        self.picked_food_handle = int()
 
     def send_signal(self):
         self.returnCode = vrep.simxSetIntegerSignal(self.clientID, 'Presence', self.ir_sensor_value, vrep.simx_opmode_oneshot)
