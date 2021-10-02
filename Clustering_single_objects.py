@@ -32,6 +32,7 @@ start_time = [float(0.0)] * num_robots
 v_l = [float(0.0)] * num_robots  # left wheel angular velocity
 v_r = [float(0.0)] * num_robots  # right wheel angular velocity
 rot_t = [float(0.0)] * num_robots  # Time to sleep
+grad_dir = 1  # 1 is for towards food and -1 towards clustering point
 foods_pos = []  # food position w.r.t ref frame
 str_mov = [True] * num_robots  # Condition for straight movement
 rob_status = [False] * num_robots  # either is searching or looking for nest
@@ -45,8 +46,9 @@ all_nest_info = [[] for _ in range(num_robots)]  # Robots containing nest inform
 food_handles = []  # Handles of all food items
 cluster_objh=_handles = []  # Handles of all objects placed on some possible targets
 food_items = [str(i) for i in range(20)]
-moved_food = []  # Handles of food moved from arena
+moved_food = []  # Handles of food moved in each iteration
 moved_food_pos = []  # positions of moved food
+all_moved_food = set([])  # All moved food handles
 for i in food_items:  # Loop to acquire Handles of all objects
     errorCode, food_handle = vrep.simxGetObjectHandle(clientID, 'Food' + i, vrep.simx_opmode_blocking)
     food_handles.append(food_handle)
@@ -65,10 +67,10 @@ inflammation = []  # sum of ir values of all robots for all iterations
 t = 0
 current_time = time.time()
 vrep.simxStartSimulation(clientID, vrep.simx_opmode_blocking)
-while current_time - loop_start_time < 100:  # Main loop
+while current_time - loop_start_time < 400:  # Main loop
     rob = list(range(num_robots))  # To run the execution in third loop (while)
     #----------------Calculate inflammation in each iteration------------#
-    for move_food_handle in moved_food:  # loop to acquire position of transferred food
+    for move_food_handle in moved_food:  # loop to acquire position of transferred food in each iteration
         returnCode, food_pos = vrep.simxGetObjectPosition(clientID, move_food_handle, robots[0].ref_frame_handle,
                                                           vrep.simx_opmode_blocking)
         moved_food_pos.append(food_pos[:2])
@@ -80,11 +82,17 @@ while current_time - loop_start_time < 100:  # Main loop
     arena_x, arena_y, rob_pos_im = cartesian_im_trans(3.1, 3.1, 0.025, robots_position)  # Convert robots pos in pixels
     rob_pos_im_mod = rob_pos_im[all_rob_pick_food == False]  # Only free robots will induce monokines
     #print('Robot Orientations are', np.array(rob_orien) * (180/math.pi))
-    mono_im = chemotaxis_gradient_forging(mono_im, rob_pos_im_mod, 'von_neumann', 0.15, 0.025, 0.35, 100)  # Updating mono-taxis mask
+    chem_im = chemotaxis_gradient_forging(chem_im, food_pos_im, 'von_neumann', 0.125, 0.021, 0.35, 100)  # Updating chemo-taxis mask of obj not picked
+    mono_im = chemotaxis_gradient_forging(mono_im, rob_pos_im_mod, 'von_neumann', 0.127, 0.0205, 0.32, 100)  # Updating mono-taxis mask of robots
     collobj_mono_im = chemotaxis_gradient_forging(collobj_mono_im, moved_food_pos_im, 'von_neumann', 0.175, 0.025, 0.25, 100)  # Updating nest mono-taxis mask
-    print('mono im max', np.max(mono_im))
-    chem_im = chemotaxis_gradient_forging(chem_im, food_pos_im, 'von_neumann', 0.125, 0.021, 0.35, 100)  # Updating chemo-taxis mask
+    print('collobj_mono_im', np.max(collobj_mono_im))
+    gradient_im = chem_im - collobj_mono_im
     #----------Loop to measure control parameter for each robot----------#
+    if 0 in moved_food:
+        moved_food.remove(0)
+    all_moved_food = all_moved_food.union(set(moved_food)) # Join all moved foods
+    print('All moved food is', all_moved_food)
+    print('Not moved food handles', food_handles)
     moved_food.clear()  # Clear moved food of each Iteration
     for i in range(num_robots):
         print('Robot number = ', i)
@@ -93,7 +101,10 @@ while current_time - loop_start_time < 100:  # Main loop
         front_ir_value, front_ir_status = robots[i].front_vision_sensor()
         robots[i].sensor_mod_values(0.1, 0.15)  # modified sensor values for virtual forces
         robots[i].sensor_avoidance_values(0.15, 0.25)  # modified sensor values for object avoidance
+        avoidable_obj = robots[i].static_object_handles + robot_handles + (food_handles if robots[i].food_picked else list(all_moved_food))
         chem_avg_value = average_filter(chem_im, rob_pos_im[i])  # Average chemo value around robot
+        collobj_mono_avg = average_filter(collobj_mono_im, rob_pos_im[i])  # Average objects monokine value (secreted by objects at nest)
+        gradient_im_avg = chem_avg_value - collobj_mono_avg  # Avg filter value of monokine and nest objects
         '''if True:  # Update nest info of an unknown robot (An condition will be changed here)
             detected_robot = set(robot_handles).intersection(set(robots[i].det_rob))
             detected_rob_num = [robot_handles.index(m) for m in detected_robot]
@@ -103,10 +114,9 @@ while current_time - loop_start_time < 100:  # Main loop
         #informed_robot = bool(robots[i].nest_info) and robots[i].food_picked  # knows about nest
         #print('condition for nest search', nest_search)
         #print('condition for moving Target', informed_robot)
-        print('chem_avg_value', chem_avg_value)
-        avoidable_obj = robots[i].static_object_handles + robot_handles + (food_handles if robots[i].food_picked else moved_food)
+        print('gradient_im_avg', gradient_im_avg)
         # -----------------Random levy search in black area-------------#
-        if chem_avg_value < 0.0001:  # threshold to check robot is in gradient of food or looking for nest
+        if abs(gradient_im_avg) < 0.00001:  # threshold to check robot is in gradient of food or looking for nest
             obj_theta = robots[i].object_avoidance(avoidable_obj, 0.20)  # obj avoidance will be for robots and objects
             if not robots[i].obj_avoid:
                 levy_theta = robots[i].random_rotation_angle()
@@ -127,18 +137,30 @@ while current_time - loop_start_time < 100:  # Main loop
         obj_theta = robots[i].object_avoidance(avoidable_obj, 0.20)
         rot_theta = obj_theta
         #----------------Robot detected food to pick -------------------#
+        if gradient_im_avg < 0 and robots[i].first_food_picked:  # robot having first food but detected a cluster
+            robots[i].food_picked = True
+            robots[i].first_food_picked = False
+            robots[i].first_food_dropped = True
+        #if 0 in all_moved_food:
+            #all_moved_food.remove(0)
         food_matched = list(set(robots[i].det_obj_handles[1:4]).intersection(set(food_handles)))
+        nest_food_detected = list(set(robots[i].det_obj_handles[1:4]).intersection(all_moved_food))
         #pick_cond = robots[i].det_obj_handles[2] in food_handles
-        if food_matched and :  # Pick food from Arena, when robot does not have food
+        drop_cond = robots[i].food_picked and nest_food_detected and gradient_im_avg < 0
+        print('nest_food_detected', nest_food_detected)
+        print('Dropping food condition at nest', drop_cond)
+        if food_matched and not robots[i].food_picked:  # Pick food from Arena, when robot does not have food
             print('Food is found by robot')
-            if not robots[i].food_picked:  # Acquire first or every acquiring food
-                robots[i].pick_food_object(food_matched[0])  # other method robots[i].det_obj_handles[2]
-                robots[i].first_food_picked = True  # Only for initial run
-            elif robots[i].first_food_picked and not robots[i].first_food_dropped:  # One time run only
+            if robots[i].first_food_picked and not robots[i].first_food_dropped:  # One time run only
                 moved_food.append(robots[i].picked_food_handle)
                 moved_food.append(food_matched[0])
                 robots[i].drop_food_object()
+                robots[i].first_food_picked = False
                 robots[i].first_food_dropped = True
+            elif not robots[i].food_picked:  # Acquire first or every acquiring food
+                robots[i].pick_food_object(food_matched[0])  # other method robots[i].det_obj_handles[2]
+                robots[i].first_food_picked = True  # Only for initial run
+                robots[i].food_picked = robots[i].first_food_dropped  # To make food_picked False overcome first food condition
             index_cap_food = food_handles.index(food_matched[0])  # find index of captured food handle
             food_handles.remove(food_matched[0])  # Remove food element from food list
             cap_food_pos = food_pos_im[index_cap_food]  # Acquire pos of captured food and remove it
@@ -153,7 +175,7 @@ while current_time - loop_start_time < 100:  # Main loop
                 prev_cal_angle[i].append(vision_grad_theta)  # update variable of previous angle
                 prev_cal_mag[i].append(clamp(vision_max_grad, 0.05, 0.1))  # update variable of previous  magnitude
                 continue
-            elif Drop_food_cond:  # Condition to drop food
+            if robots[i].picked_food:  # Condition to drop food
                 print('Moving into nest')
                 print('Food is dropped--------------------------------------')
                 robots[i].drop_food_object()
@@ -168,7 +190,23 @@ while current_time - loop_start_time < 100:  # Main loop
                 prev_cal_angle[i].append(vision_grad_theta)  # update variable of previous angle
                 prev_cal_mag[i].append(vision_max_grad)  # update variable of previous  magnitude
                 continue'''
-            all_grad, max_grad = chemotaxis_gradient_foraging(chem_im, mono_im, rob_pos_im[i], 0.001)
+            grad_dir = 1
+            if drop_cond:  # Condition to drop food
+                print('Food is dropped--------------------------------------')
+                moved_food.append(robots[i].picked_food_handle)
+                robots[i].drop_food_object()
+                #robots[i].nest_info = robots_position[i]  # update nest info of a robot who reached at nest
+                prev_cal_angle[i].clear()
+                prev_cal_angle[i].append(math.pi)
+                prev_cal_mag[i].clear()
+                #  Move robot 180 degree to move away
+                continue
+            elif (gradient_im_avg < 0 and robots[i].first_food_picked) or robots[i].food_picked:  # first pick robot moving towards predefined nest
+                grad_dir = -1
+                print('Gradient is moving towards nest')
+            #elif gradient_im_avg > 0 and robots[i].first_food_picked:
+                #grad_dir = 1
+            all_grad, max_grad = chemotaxis_gradient_foraging(gradient_im, mono_im, rob_pos_im[i], grad_dir, grad_dir * 0.001)
             chemo_theta = robots[i].rotational_angle(all_grad, max_grad, obj_theta)  #  Require diection of Robot calculated by chemotaxis
             rot_theta = ((chemo_theta - rob_orien[i]) + math.pi) % (2 * math.pi) - math.pi
             disp_value = 0.0375 if chem_avg_value > 0.045 else 0.075  # displacement value inversely proportional to presence of chemical
@@ -223,6 +261,16 @@ vrep.simxPauseCommunication(clientID, False)
 plt.title('Food Location Plot')
 plt.xlabel('Y-axis')
 plt.ylabel('X-axis')
-plt.imshow(np.transpose(chem_im), origin='lower')
+plt.imshow(chem_im, origin='lower')
+plt.show()
+plt.title('Moved Food Location Plot')
+plt.xlabel('Moved Food Y-axis')
+plt.ylabel('Moved Food X-axis')
+plt.imshow((collobj_mono_im), origin='lower')
+plt.show()
+plt.title('Combination of Monokine and chemokine Plot')
+plt.xlabel('Moved Food Y-axis')
+plt.ylabel('Moved Food X-axis')
+plt.imshow((gradient_im), origin='lower')
 plt.show()
 
