@@ -120,6 +120,16 @@ def cluster_count(robs_pos, sensor_range):
     else:
         return neigh_rob
 
+# number of points around a specific point
+def robots_range(center_clusters, robs_pos, sensor_range):
+    robs_pos = np.array(robs_pos)
+    neigh_rob = list()
+    for i in range(len(center_clusters)):
+        dist = fitness(center_clusters[i], robs_pos)
+        neigh_rob.append(list(np.where(dist < sensor_range)[0]))
+    else:
+        return neigh_rob
+
 
 def flock_members(rob_p, sens_range):
     neigh_comb = []
@@ -144,13 +154,45 @@ def flock_members(rob_p, sens_range):
             final_clusters_len = [len(sub_clus) for sub_clus in final_clusters]
             largest_cluster, len_largest_cluster = find_maxLen_list(final_clusters)
             print('Largest Cluster is', largest_cluster)
-            return (final_clusters, final_clusters_len, largest_cluster, len_largest_cluster)
+        return (final_clusters, final_clusters_len, largest_cluster, len_largest_cluster)
+
+
+def cluster_formed(rob_p, sens_range):
+    neigh_comb = []  # group of robots in a certain sensor range of robot
+    final_clusters = []
+    neigh_rob = cluster_count(rob_p, sens_range)
+    comb_len = [len(comb)for comb in neigh_rob]
+    max_comb = max(comb_len)
+    if max_comb > 1:
+        for i in range(len(neigh_rob)): # remove single robot from list of combination
+            if len(neigh_rob[i]) != 1 :
+                neigh_comb.append(set(neigh_rob[i]))
+    else:
+        neigh_comb = [set(single) for single in neigh_rob]
+    for base_cluster in neigh_comb:
+    #print('base_cluster', base_cluster)
+        for next_cluster in neigh_comb:
+            if len(base_cluster.intersection(next_cluster)) != 0:
+                base_cluster = base_cluster.union(next_cluster)
+                #print('next_cluster', next_cluster)
+                #print('base_cluster', base_cluster)
+                #neigh_comb.remove(next_cluster)
+                #print('neigh_comb', neigh_comb)
+        #print(list(base_cluster))
+        final_clusters.append(list(base_cluster))
+    final_clusters = remove_common(final_clusters)
+    final_clusters_len = [len(sub_clus) for sub_clus in final_clusters]
+    print(final_clusters)
+    print(final_clusters_len)
+    largest_cluster, len_largest_cluster = find_maxLen_list(final_clusters)
+    print('Largest Cluster is', largest_cluster)
+    return (final_clusters, final_clusters_len, largest_cluster, len_largest_cluster)
 
 
 def cartesian_im_trans(ran_x, ran_y, size_pix, coord_obj_plac):
     ran_x_pix = round(ran_x / size_pix)
     ran_y_pix = round(ran_y / size_pix)
-    chemo_array = np.zeros([ran_x_pix, ran_y_pix])  # mask
+    #chemo_array = np.zeros([ran_x_pix, ran_y_pix])  # mask
     pix_obj_plac = np.array(coord_obj_plac) / size_pix
     pix_obj_plac = pix_obj_plac.astype(int)
     return ran_x_pix, ran_y_pix, pix_obj_plac
@@ -182,13 +224,13 @@ def chemotaxis_gradient_forging(chem_im, pos_bacteria, neighbor_hood, c1, c2, di
 
 
 # Robot finding food or things in arena by sensing chemicals secreted by food.
-def chemotaxis_gradient_foraging(chemokines, monokines, rob_pos_mask, mono_factor):
+def chemotaxis_gradient_foraging(chemokines, monokines, rob_pos_mask, grad_dir,  mono_factor):
     x = rob_pos_mask[0]
     y = rob_pos_mask[1]
-    gradx = (chemokines[x + 1][y] - chemokines[x - 1][y]) - mono_factor * (monokines[x + 1][y] - monokines[x - 1][y])
-    grady = (chemokines[x][y + 1] - chemokines[x][y - 1]) - mono_factor * (monokines[x][y + 1] - monokines[x][y - 1])
-    gradxy = (chemokines[x + 1][y + 1] - chemokines[x - 1][y - 1]) - mono_factor * (monokines[x + 1][y + 1] - monokines[x - 1][y - 1])
-    gradyx = (chemokines[x - 1][y + 1] - chemokines[x + 1][y - 1]) - mono_factor * (monokines[x - 1][y + 1] - monokines[x + 1][y - 1])
+    gradx = grad_dir * (chemokines[x + 1][y] - chemokines[x - 1][y]) - mono_factor * (monokines[x + 1][y] - monokines[x - 1][y])
+    grady = grad_dir * (chemokines[x][y + 1] - chemokines[x][y - 1]) - mono_factor * (monokines[x][y + 1] - monokines[x][y - 1])
+    gradxy = grad_dir * (chemokines[x + 1][y + 1] - chemokines[x - 1][y - 1]) - mono_factor * (monokines[x + 1][y + 1] - monokines[x - 1][y - 1])
+    gradyx = grad_dir * (chemokines[x - 1][y + 1] - chemokines[x + 1][y - 1]) - mono_factor * (monokines[x - 1][y + 1] - monokines[x + 1][y - 1])
     all_grad = np.array([gradx, grady, gradxy, gradyx])
     max_grad = np.max(abs(all_grad))
     if max_grad == 0.0:  # To overcome infinite array
@@ -206,3 +248,11 @@ def average_filter(chemo_array, rob_pos_im):
             chemo_array[k - 2][j] + chemo_array[k - 1][j - 1] + chemo_array[k][j - 2] + chemo_array[k + 1][j - 1] +
             chemo_array[k + 2][j] + chemo_array[k + 1][j + 1] + chemo_array[k][j + 2] + chemo_array[k - 1][j + 1])
     return avg_chemo
+
+
+# Evaluation of Foraging
+def coll_items(n_items, total_food_coll, coll_items_time, time_passed):
+    n_items_parts = [int(n_items * i/10) for i in range(11)]
+    #print('n_items_parts')
+    perc_time = [time_passed[coll_items_time.index(x)] for x in n_items_parts if x < total_food_coll]
+    return perc_time
